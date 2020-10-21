@@ -1,6 +1,5 @@
 import requests
 import pymongo
-from bs4 import BeautifulSoup, NavigableString, Comment
 
 host = 'localhost'
 
@@ -16,7 +15,7 @@ def getRaw(URL):
         return res.json()
 
 
-def crawlWord(word):
+def crawlNaver(word):
     li = []
     syn = []  # 유의어
     atn = []  # 반의어
@@ -26,28 +25,19 @@ def crawlWord(word):
             'https://ko.dict.naver.com/api3/koko/search?query=%s&m=pc&range=word&page=%d&shouldSearchOpen=false' % (
                 word, i))
         for w in obj['searchResultMap']['searchResultListMap']['WORD']['items']:
-            if w['handleEntry'] == word:
+            if w['matchType'][:5] == 'exact':
                 li.append(w['entryId'])
     for i in li:
         obj = getRaw('https://ko.dict.naver.com/api/platform/koko/entry.nhn?entryId=%s&meanType=undefined' % i)
         if not obj['entry']['relateds']:
             continue
         for w in obj['entry']['relateds']:
-            if w['related_type'] == 'adjacent' or w['related_type'] == 'syn':
+            if w['related_type'] == 'syn':  # adjacent
                 syn.append(w['related_content'])
             elif w['related_type'] == 'opposite' or w['related_type'] == 'atn':
                 atn.append(w['related_content'])
             elif w['related_type'] == 'dialect':
                 dia.append(w['related_content'])
-    ts = set(syn)
-    ts.discard(word)
-    syn = list(ts)
-    ts = set(atn)
-    ts.discard(word)
-    atn = list(ts)
-    ts = set(dia)
-    ts.discard(word)
-    dia = list(ts)
     return syn, atn
 
 
@@ -58,6 +48,7 @@ def connectDB():
             wordDB = conn["wordDB"]
             return wordDB
         except:
+
             pass
 
 
@@ -66,7 +57,16 @@ def getWord(word):
     if wordDB['word'].find_one({"word": word}):
         data = wordDB['word'].find_one({"word": word})
         return data['syn'], data['atn']
-    syn, atn = crawlWord(word)
+    n_syn, n_atn = crawlNaver(word)
+
+    syn = n_syn
+    atn = n_atn
+    ts = set(syn)
+    ts.discard(word)
+    syn = list(ts)
+    ts = set(atn)
+    ts.discard(word)
+    atn = list(ts)
     wordDB['word'].insert_one({
         'word': word,
         'syn': syn,
@@ -75,4 +75,4 @@ def getWord(word):
     return syn, atn
 
 
-print(getWord('삼키다'))
+print(getWord(input()))
